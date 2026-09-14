@@ -49,14 +49,22 @@ jobs:
       - name: Build Velocity
         shell: powershell
         run: |
-          msbuild "cs2\velocity-cs2\velocity-cs2.vcxproj" `
-            /m `
-            /t:Rebuild `
-            /v:normal `
-            /p:Configuration=${{ matrix.configuration }} `
-            /p:Platform=x64 `
-            /p:LLVMInstallDir="C:\Program Files\LLVM\" `
-            /p:LLVMToolsVersion=19.1.7
+          $args = @(
+            "cs2\velocity-cs2\velocity-cs2.vcxproj"
+            "/m"
+            "/t:Rebuild"
+            "/v:normal"
+            "/p:Configuration=${{ matrix.configuration }}"
+            "/p:Platform=x64"
+            "/p:LLVMInstallDir=C:\Program Files\LLVM"
+            "/p:LLVMToolsVersion=19.1.7"
+          )
+
+          & msbuild @args
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Show output
         shell: powershell
@@ -67,6 +75,8 @@ jobs:
           if (Test-Path "cs2\bin") {
             Get-ChildItem "cs2\bin" -Recurse |
               Select-Object FullName, Length
+          } else {
+            Write-Host "cs2/bin was not created"
           }
 
       - name: Upload DLL
