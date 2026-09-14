@@ -30,14 +30,21 @@ jobs:
         with:
           msbuild-architecture: x64
 
-      - name: Show tool versions
+      - name: Install LLVM 19
         shell: powershell
         run: |
-          Write-Host "=== MSBuild ==="
-          msbuild -version
+          choco upgrade llvm `
+            --version=19.1.7 `
+            --allow-downgrade `
+            --force `
+            -y `
+            --no-progress
 
-          Write-Host "=== Clang ==="
-          clang-cl --version
+      - name: Check LLVM
+        shell: powershell
+        run: |
+          & "C:\Program Files\LLVM\bin\clang-cl.exe" --version
+          & "C:\Program Files\LLVM\bin\lld-link.exe" --version
 
       - name: Build Velocity
         shell: powershell
@@ -45,12 +52,15 @@ jobs:
           msbuild "cs2\velocity-cs2\velocity-cs2.vcxproj" `
             /m `
             /t:Rebuild `
+            /v:normal `
             /p:Configuration=${{ matrix.configuration }} `
             /p:Platform=x64 `
-            /p:LLVMToolsVersion=20
+            /p:LLVMInstallDir="C:\Program Files\LLVM\" `
+            /p:LLVMToolsVersion=19.1.7
 
-      - name: Show build output
+      - name: Show output
         shell: powershell
+        if: always()
         run: |
           Write-Host "=== cs2/bin ==="
 
@@ -58,11 +68,9 @@ jobs:
             Get-ChildItem "cs2\bin" -Recurse |
               Select-Object FullName, Length
           }
-          else {
-            Write-Error "cs2/bin directory was not created."
-          }
 
       - name: Upload DLL
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Velocity-${{ matrix.configuration }}-x64
