@@ -12,7 +12,14 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: windows-2025
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Development
+          - Ship
 
     steps:
       - name: Checkout repository
@@ -20,73 +27,44 @@ jobs:
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
 
-      - name: Find Visual Studio projects
+      - name: Show tool versions
         shell: powershell
         run: |
-          Write-Host "Solutions:"
-          Get-ChildItem -Path . -Recurse -Filter *.sln |
-            Select-Object FullName
+          Write-Host "=== MSBuild ==="
+          msbuild -version
 
-          Write-Host "Projects:"
-          Get-ChildItem -Path . -Recurse -Filter *.vcxproj |
-            Select-Object FullName
+          Write-Host "=== Clang ==="
+          clang-cl --version
 
-      - name: Build
+      - name: Build Velocity
         shell: powershell
         run: |
-          $sln = Get-ChildItem -Path . -Recurse -Filter *.sln | Select-Object -First 1
+          msbuild "cs2\velocity-cs2\velocity-cs2.vcxproj" `
+            /m `
+            /t:Rebuild `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=x64 `
+            /p:LLVMToolsVersion=20
 
-          if ($sln) {
-              Write-Host "Building solution:"
-              Write-Host $sln.FullName
+      - name: Show build output
+        shell: powershell
+        run: |
+          Write-Host "=== cs2/bin ==="
 
-              msbuild $sln.FullName `
-                /m `
-                /p:Configuration=Release `
-                /p:Platform=x64
+          if (Test-Path "cs2\bin") {
+            Get-ChildItem "cs2\bin" -Recurse |
+              Select-Object FullName, Length
           }
           else {
-              $proj = Get-ChildItem -Path . -Recurse -Filter *.vcxproj | Select-Object -First 1
-
-              if (-not $proj) {
-                  throw "No .sln or .vcxproj found"
-              }
-
-              Write-Host "Building project:"
-              Write-Host $proj.FullName
-
-              msbuild $proj.FullName `
-                /m `
-                /p:Configuration=Release `
-                /p:Platform=x64
+            Write-Error "cs2/bin directory was not created."
           }
 
-      - name: Find build outputs
-        shell: powershell
-        run: |
-          Write-Host "DLL files:"
-          Get-ChildItem -Path . -Recurse -Filter *.dll |
-            Select-Object FullName, Length
-
-          Write-Host "EXE files:"
-          Get-ChildItem -Path . -Recurse -Filter *.exe |
-            Select-Object FullName, Length
-
-      - name: Collect build
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force artifact
-
-          Get-ChildItem -Path . -Recurse -Include *.dll,*.exe |
-            Where-Object {
-              $_.FullName -notmatch '\\artifact\\'
-            } |
-            Copy-Item -Destination artifact
-
-      - name: Upload build
+      - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
-          name: Velocity-Release-x64
-          path: artifact/*
+          name: Velocity-${{ matrix.configuration }}-x64
+          path: cs2/bin/*.dll
           if-no-files-found: error
