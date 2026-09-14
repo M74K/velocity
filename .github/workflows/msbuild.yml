@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-2025
+    runs-on: windows-2022
 
     strategy:
       fail-fast: false
@@ -33,23 +33,29 @@ jobs:
       - name: Install LLVM 19
         shell: powershell
         run: |
-          choco upgrade llvm `
+          choco install llvm `
             --version=19.1.7 `
             --allow-downgrade `
             --force `
             -y `
             --no-progress
 
-      - name: Check LLVM
+      - name: Check toolchain
         shell: powershell
         run: |
+          Write-Host "=== MSBuild ==="
+          msbuild -version
+
+          Write-Host "=== Clang ==="
           & "C:\Program Files\LLVM\bin\clang-cl.exe" --version
+
+          Write-Host "=== LLD ==="
           & "C:\Program Files\LLVM\bin\lld-link.exe" --version
 
       - name: Build Velocity
         shell: powershell
         run: |
-          $args = @(
+          $arguments = @(
             "cs2\velocity-cs2\velocity-cs2.vcxproj"
             "/m"
             "/t:Rebuild"
@@ -60,23 +66,24 @@ jobs:
             "/p:LLVMToolsVersion=19.1.7"
           )
 
-          & msbuild @args
+          & msbuild @arguments
 
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
 
-      - name: Show output
-        shell: powershell
+      - name: Show build output
         if: always()
+        shell: powershell
         run: |
-          Write-Host "=== cs2/bin ==="
+          Write-Host "=== Build output ==="
 
           if (Test-Path "cs2\bin") {
             Get-ChildItem "cs2\bin" -Recurse |
               Select-Object FullName, Length
-          } else {
-            Write-Host "cs2/bin was not created"
+          }
+          else {
+            Write-Host "cs2/bin does not exist"
           }
 
       - name: Upload DLL
